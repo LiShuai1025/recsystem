@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PageRank Friend Recommendations</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-left: 5px solid #4a6ee0;
+        }
+        .header h1 {
+            margin: 0 0 10px;
+            color: #2c3e50;
+        }
+        .header p {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+        .content {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .right-panel {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        #graph {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            background-color: #fafbfc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e1e8ed;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        th:hover {
+            background-color: #e9ecef;
+        }
+        th.sort-asc::after {
+            content: " ↑";
+            font-weight: bold;
+            color: #4a6ee0;
+        }
+        th.sort-desc::after {
+            content: " ↓";
+            font-weight: bold;
+            color: #4a6ee0;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        tr.selected {
+            background-color: #e3f2fd;
+        }
+        .node-info {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #4a6ee0;
+        }
+        .node-info h4 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 1px solid #e1e8ed;
+            padding-bottom: 10px;
+        }
+        .recommendations {
+            margin-top: 20px;
+        }
+        .recommendation-item {
+            padding: 12px;
+            margin: 8px 0;
+            background-color: #e8f5e8;
+            border-radius: 6px;
+            border-left: 4px solid #4caf50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 12px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4a6ee0;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #3a5ecf;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .recommendation-item button {
+            padding: 6px 12px;
+            font-size: 12px;
+            background-color: #4caf50;
+        }
+        .recommendation-item button:hover {
+            background-color: #3d8b40;
+        }
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e1e8ed;
+        }
+        .info-text {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .stat-box {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            border-left: 3px solid #4a6ee0;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PageRank Friend Recommendations</h1>
+            <p>Interactive visualization showing how PageRank algorithm can suggest new connections in social networks</p>
+        </div>
+        
+        <div class="controls">
+            <button id="computeBtn">Compute PageRank</button>
+            <button id="resetBtn">Reset Graph</button>
+        </div>
+
+        <div class="content">
+            <div class="left-panel">
+                <div class="panel-title">Network Visualization</div>
+                <div id="graph"></div>
+            </div>
+            
+            <div class="right-panel">
+                <div class="panel-title">Node Information</div>
+                <div id="nodeDetails">
+                    <p class="info-text">Click on a node in the graph or table to see details</p>
+                </div>
+                
+                <div class="panel-title">Node Table</div>
+                <table id="nodeTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>PageRank</th>
+                            <th>Friends</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+      <script src="app.js"></script>
+    <script src="pagerank.js"></script>
+    <script src="graph.js"></script>
+</body>
+</html>
